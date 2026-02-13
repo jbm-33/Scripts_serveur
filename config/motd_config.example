@@ -1,0 +1,14 @@
+# Configuration du bandeau de connexion (MOTD)
+# Copier vers /root/Devops/.motd_config et adapter.
+# Le script install_motd.sh peut aussi créer ce fichier avec le nom du serveur.
+#
+# Format: clé:valeur (une par ligne)
+
+# Nom affiché du serveur (ex:MonServeur)
+server_name:Mon Serveur
+
+# Sous-titre / marque (ex:"par Votre Société")
+tagline:par Votre Société
+
+# URL affichée (optionnel)
+url:https://example.com

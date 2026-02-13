@@ -1,0 +1,8 @@
+# Fichier de configuration optionnel pour vhost_apache.sh
+# Copier vers /root/Devops/.vhost_config et adapter les valeurs.
+# Format: clé:valeur (une par ligne)
+
+admin_mail:admin@example.com
+cust_mail:client@example.com
+ipaddress:*
+php_version:8.1

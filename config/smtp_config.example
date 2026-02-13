@@ -1,0 +1,18 @@
+# Configuration optionnelle du relais SMTP pour Postfix
+# Copier vers /root/Devops/.smtp_config et adapter.
+# Si ce fichier n'existe pas, Postfix envoie directement (mode "Internet Site").
+#
+# Format (une ligne par clé, pas d'espaces autour du :) :
+#
+# relay_host:smtp.votre-fournisseur.com
+# smtp_user:votre-email@domaine.com
+# smtp_pass:votre-mot-de-passe-application
+#
+# Exemples de relais :
+# - OVH : relay_host:ssl0.ovh.net  (port 587, identifiants OVH)
+# - Gmail : relay_host:smtp.gmail.com + mot de passe d'application
+# - SendGrid / Mailgun : host et clé API dans smtp_user / smtp_pass
+
+relay_host:smtp.example.com
+smtp_user:user@example.com
+smtp_pass:your-app-password

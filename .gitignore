@@ -1,0 +1,5 @@
+# Fichier de config local (copie de .env.example)
+.env
+
+# Logs et backups générés sur le serveur (si on clone le repo côté serveur)
+*.log

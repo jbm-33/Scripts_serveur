@@ -128,7 +128,7 @@ if command -v python3 &>/dev/null && [[ -n "$DB_PASS" ]]; then
   DB_PASS_ENC=$(printf '%s' "$DB_PASS" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))" 2>/dev/null) || DB_PASS_ENC="$DB_PASS"
 fi
 
-DATABASE_URL="mysql://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:3306/${DB_NAME}?serverVersion=mariadb-10.6"
+DATABASE_URL="mysql://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:3306/${DB_NAME}?serverVersion=mariadb-10.6.0"
 
 # --- 3) Déploiement du code (déjà fait si REPO_BUCKET_URL ; sinon copie depuis le répertoire local) ---
 if [[ -z "$REPO_BUCKET_URL" ]]; then

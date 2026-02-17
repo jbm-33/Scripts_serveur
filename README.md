@@ -153,8 +153,8 @@ Mise à jour : hostname persistant, `/etc/hosts`, Postfix, MOTD. Reconnectez-vou
 # Nom du serveur uniquement
 sudo ./scripts/install_motd.sh "Mon Serveur"
 
-# Nom + sous-titre (ex: "by ScalarX") + URL
-sudo ./scripts/install_motd.sh "StackX" "by ScalarX" "https://example.com"
+# Nom + sous-titre + URL
+sudo ./scripts/install_motd.sh
 ```
 
 Sans argument, le script demande le nom du serveur.
@@ -413,7 +413,7 @@ Exemple : `config/smtp_config.example`. Après création de `.smtp_config`, rela
 - **SSH** : Connexion root autorisée avec mot de passe, limitation des tentatives (MaxAuthTries: 3), timeout de connexion
 - **Mises à jour automatiques** : Configuration pour installer automatiquement les mises à jour de sécurité
 - **Configuration système** : Protection contre IP spoofing, SYN flood, paquets martiens
-- **Outils de sécurité** : AIDE (détection d'intrusion), rkhunter (détection rootkits)
+- **Outils de sécurité** : AIDE (détection d'intrusion)
 - **Limites système** : Configuration des limites de ressources
 - **Permissions** : Vérification et correction des permissions des fichiers sensibles
 - **Apache** : Headers de sécurité, masquage des informations serveur
@@ -424,8 +424,61 @@ Exemple : `config/smtp_config.example`. Après création de `.smtp_config`, rela
 - **Vérification** : `./scripts/verify_services.sh` — état systemd et tests de connexion (HTTP, MongoDB, MariaDB, SSH). Exécuté automatiquement en fin d’installation.
 - **Sauvegarde** : `./scripts/backup_devops.sh` — crée une archive datée dans `${DEVOPS_ROOT}/backups/` (passwords, configs, iptables, optionnellement dumps MongoDB et MariaDB).
 - **Restauration de configs** : `./scripts/restore_configs.sh` — restaure un fichier `.backup` depuis `${DEVOPS_ROOT}/configs/` vers le chemin système (avec confirmation).
+- **Désinstallation d’un vhost** : `./scripts/uninstall_vhost.sh [NOM_VHOST] [-y]` — supprime le vhost choisi (Apache, pool PHP-FPM, base et user MySQL, utilisateur système et `/home/<user>`). S’appuie sur `${DEVOPS_ROOT}/sites/<vhost>.installed`. Sans argument : affiche la liste des vhosts et demande lequel désinstaller.
 - **Rotation des logs** : `./scripts/install_logrotate.sh` — configure logrotate pour Apache, PHP-FPM, MongoDB, MariaDB, fail2ban et les logs d’installation. Exécuté en fin d’install.
 - **SSL (Let's Encrypt)** : `./scripts/install_certbot.sh` — installe certbot pour Apache. Ensuite, `vhost_apache.sh -l 1` permet d’obtenir un certificat HTTPS pour un vhost.
+
+### install_extractMeta.sh — Application Extract Data (exports Metabase)
+
+Script d’installation d’une application **Extract Data** (exports Metabase). **Ordre** : 1) création du vhost Apache (`vhost_apache.sh`), 2) création de `/home/<user>/app` et du marqueur **`.extract_data`** dans ce dossier, 3) déploiement du code, Composer, .env, Doctrine.
+
+**Prérequis**
+
+- Exécution en **root**.
+- **Argument unique** : FQDN du vhost (ex. `extract.gazoleen.gzl`). Le vhost est créé en premier ; l’utilisateur système est celui créé par `vhost_apache.sh`.
+
+**Source du code**
+
+- **Par défaut** : clone du dépôt **Metabase** `git@github.com:jbm-33/Metabase.git`.
+- **Sans URL** : si `REPO_BUCKET_URL` est vide, le script utilise le répertoire courant (racine du dépôt qui contient un dossier `app/`).
+- **Avec `REPO_BUCKET_URL`** : téléchargement du code depuis l’URL fournie. Formats supportés : `.zip`, `.tar.gz`, `.tgz`, ou URL `.git` (ex. `git@github.com:jbm-33/Metabase.git`).
+
+**Usage**
+
+```bash
+# Un seul argument : FQDN du vhost
+sudo ./install_extractMeta.sh extract.gazoleen.gzl
+
+# Depuis une autre URL (surcharger REPO_BUCKET_URL)
+sudo REPO_BUCKET_URL=https://storage.example.com/repo.zip ./install_extractMeta.sh extract.gazoleen.gzl
+```
+
+**Fichiers utilisés**
+
+| Élément | Chemin / contenu |
+|--------|-------------------|
+| Utilisateur cible et BDD | Créés par `vhost_apache.sh` ; lecture dans `/root/Devops/sites/<FQDN>.installed` (`login:`, `loginmysql:`, `passsxmysql:`) |
+| Marqueur Extract Data | `/home/<user>/app/.extract_data` (créé par le script) |
+| Application installée | `/home/<user>/app/` |
+| Document root vhost | `data/www` → `app/public` |
+
+**Actions du script (ordre)**
+
+1. Crée le vhost Apache via `scripts/vhost_apache.sh` (argument 2 = FQDN). L’utilisateur système est créé par le vhost.
+2. Lit l’utilisateur dans `/root/Devops/sites/<fqdn>.installed`, crée `/home/<user>/app` et y ajoute le fichier **`.extract_data`**.
+3. Choisit le fichier `.installed` BDD (argument 1 ou seul fichier dans `/root/Devops/`), lit user/mdp, construit `DATABASE_URL`.
+4. Déploie le code (`rsync` vers `app/`), fait pointer `data/www` vers `app/public`.
+5. Lance `composer install`, crée/met à jour `.env`, exécute `doctrine:schema:update`, ajuste droits.
+
+**Exemple de préparation**
+
+```bash
+# Créer l’utilisateur cible et le marqueur
+# Fichier d’identifiants BDD (nom = user = base, ligne 2 = mdp)
+echo "extract_data" > /root/Devops/extract_data.installed
+echo "MonMotDePasseSecret" >> /root/Devops/extract_data.installed
+chmod 600 /root/Devops/extract_data.installed
+```
 
 ## Dépannage
 
@@ -510,18 +563,9 @@ sudo ./scripts/install_iptables.sh
 ### Système
 - Mises à jour automatiques de sécurité configurées
 - Protection contre IP spoofing et SYN flood
-- Outils de détection d'intrusion (AIDE, rkhunter) installés
+- Outil de détection d'intrusion (AIDE) installé
 - Limites système configurées
 
-## Notes importantes
-
-- ⚠️ **Sauvegardez le fichier `/root/Devops/.passwords`** dans un endroit sûr après l'installation
-- ⚠️ **Sauvegardez les fichiers `/root/Devops/.iptables.rules`** pour pouvoir restaurer les règles
-- ⚠️ **Sauvegardez le dossier `/root/Devops/configs/`** qui contient toutes les configurations (.conf)
-- ⚠️ Le mot de passe root du système est changé automatiquement
-- ⚠️ **La connexion SSH root est autorisée** - assurez-vous d'utiliser un mot de passe fort
-- ⚠️ Assurez-vous d'avoir un accès de secours au serveur avant d'exécuter le script
-- ⚠️ Les règles iptables bloquent tout le trafic par défaut sauf SSH, HTTP et HTTPS
 
 ## Support
 

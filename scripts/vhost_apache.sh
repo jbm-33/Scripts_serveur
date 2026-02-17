@@ -76,7 +76,8 @@ function checkip() {
 
 function checkfqdn() {
     local fqdn="$1"
-    if [[ "$fqdn" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-\.]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})$ ]]; then
+    # Au moins deux parties séparées par un point, caractères alphanumériques, tirets, points (sous-domaines autorisés)
+    if [[ "$fqdn" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\.\-]*[a-zA-Z0-9])?\.([a-zA-Z0-9\-]+\.)*[a-zA-Z]{2,}$ ]]; then
         echo -e "${GREEN} [ OK ]${NC} $fqdn is a valid FQDN, install in progress..."
     else
         echo -e "${RED} [ ERROR ]${NC} $fqdn is not a valid FQDN"
@@ -254,10 +255,14 @@ GRANT ALL PRIVILEGES ON \`$sysuser\`.* TO '$sysuser'@'localhost';
 FLUSH PRIVILEGES;
 "
 
-# Créer l'utilisateur système
+# S'assurer que le groupe users existe, puis créer ou rattacher l'utilisateur
+getent group users &>/dev/null || groupadd users
 if ! getent passwd "$sysuser" &>/dev/null; then
     useradd "$sysuser" --shell /bin/bash -g users -m -d /home/"$sysuser"
     echo -e "${sysuser_pass}\n${sysuser_pass}" | passwd "$sysuser"
+else
+    # Utilisateur existant (ex. -z passé par install_extractMeta) : le rattacher au groupe users
+    usermod -a -G users "$sysuser" 2>/dev/null || true
 fi
 
 # Fichier vhost Apache

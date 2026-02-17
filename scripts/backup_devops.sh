@@ -22,7 +22,7 @@ echo "Sauvegarde Devops vers $ARCHIVE"
 
 # Copier le contenu Devops (sans les backups pour éviter imbrication)
 mkdir -p "$TMPDIR/devops"
-for f in .passwords .iptables.rules .ip6tables.rules .vhost_config .motd_config .smtp_config 2>/dev/null; do
+for f in .passwords .iptables.rules .ip6tables.rules .vhost_config .motd_config .smtp_config; do
     [ -e "${DEVOPS_ROOT}/$f" ] && cp -a "${DEVOPS_ROOT}/$f" "$TMPDIR/devops/"
 done
 [ -d "${DEVOPS_ROOT}/configs" ] && cp -a "${DEVOPS_ROOT}/configs" "$TMPDIR/devops/"
@@ -35,7 +35,7 @@ if command -v mongodump &>/dev/null && systemctl is-active --quiet mongod 2>/dev
     DUMP_MONGO="${TMPDIR}/mongodb_dump_${STAMP}"
     mkdir -p "$DUMP_MONGO"
     mongodump --out="$DUMP_MONGO" --quiet 2>/dev/null || true
-    if [ -d "$DUMP_MONGO" ] && [ -n "$(ls -A "$DUMP_MONGO" 2>/dev/null)" ]; then
+    if [ -d "$DUMP_MONGO" ] && [ -n "$(find "$DUMP_MONGO" -maxdepth 1 -mindepth 1 2>/dev/null)" ]; then
         echo "  + dump MongoDB inclus"
     else
         rm -rf "$DUMP_MONGO"

@@ -53,13 +53,16 @@ if [ -r "$MOTD_CONFIG" ]; then
     [ -z "$URL" ] && URL=$(grep -E "^url:" "$MOTD_CONFIG" 2>/dev/null | cut -d: -f2- | sed 's/^ *//')
 fi
 
-# Créer ou mettre à jour la config
+# Créer ou mettre à jour la config (Devops + copie dans /etc pour que le script MOTD soit lisible par PAM)
 cat > "$MOTD_CONFIG" <<EOF
 server_name:$SERVER_NAME
 tagline:${TAGLINE:-}
 url:${URL:-}
 EOF
 chmod 600 "$MOTD_CONFIG"
+if [ -w /etc ]; then
+    cp "$MOTD_CONFIG" /etc/motd-server-banner.conf 2>/dev/null && chmod 644 /etc/motd-server-banner.conf
+fi
 
 # Détecter la distribution
 if [ -f /etc/os-release ]; then
@@ -89,6 +92,7 @@ LIGHT_GREEN='\033[1;32m'
 NC='\033[0m'
 
 CONFIG="__DEVOPS_ROOT__/.motd_config"
+[ ! -r "$CONFIG" ] && CONFIG="/etc/motd-server-banner.conf"
 [ ! -r "$CONFIG" ] && exit 0
 
 server_name=$(grep -E "^server_name:" "$CONFIG" 2>/dev/null | cut -d: -f2- | sed 's/^ *//')
@@ -121,6 +125,41 @@ MOTDSCRIPT
     sed -i "s|__DEVOPS_ROOT__|$DEVOPS_ROOT|g" "$MOTD_SCRIPT"
 
     chmod +x "$MOTD_SCRIPT"
+
+    # Générer /etc/motd tout de suite (au cas où PAM n'exécute pas update-motd.d ou utilise noupdate)
+    if run-parts --lsbsysinit /etc/update-motd.d > /etc/motd 2>/dev/null; then
+        echo "✓ /etc/motd généré depuis update-motd.d"
+    fi
+
+    # S'assurer que SSH affiche le MOTD (sur Debian PrintMotd est souvent 'no')
+    SSHD_CONFIG="/etc/ssh/sshd_config"
+    SSHD_DROPIN="/etc/ssh/sshd_config.d"
+    if [ -d "$SSHD_DROPIN" ]; then
+        echo "PrintMotd yes" > "$SSHD_DROPIN/99-motd.conf"
+        echo "✓ PrintMotd yes activé (sshd_config.d)"
+    elif [ -f "$SSHD_CONFIG" ]; then
+        if grep -q '^PrintMotd' "$SSHD_CONFIG"; then
+            sed -i 's/^PrintMotd.*/PrintMotd yes/' "$SSHD_CONFIG"
+        else
+            echo "PrintMotd yes" >> "$SSHD_CONFIG"
+        fi
+        echo "✓ PrintMotd yes activé dans sshd_config"
+    fi
+    # Recharger sshd uniquement si la config est valide (évite de couper les sessions)
+    if [ -f "$SSHD_CONFIG" ] && sshd -t 2>/dev/null; then
+        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+    fi
+
+    # Rafraîchir /etc/motd périodiquement (uptime, charge) pour affichage à la connexion
+    CRON_MOTD="/etc/cron.d/refresh-motd"
+    if [ -d /etc/cron.d ]; then
+        echo "SHELL=/bin/sh" > "$CRON_MOTD"
+        echo "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" >> "$CRON_MOTD"
+        echo "*/5 * * * * root run-parts --lsbsysinit /etc/update-motd.d > /etc/motd 2>/dev/null" >> "$CRON_MOTD"
+        chmod 644 "$CRON_MOTD"
+        echo "✓ Cron ajouté : /etc/motd rafraîchi toutes les 5 min"
+    fi
+
     echo "✓ MOTD dynamique installé: $MOTD_SCRIPT"
 else
     # Fallback: /etc/motd statique (autres distros)

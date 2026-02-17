@@ -67,57 +67,72 @@ fi
 TARGET_HOME="/home/${TARGET_USER}"
 APP_DIR="${TARGET_HOME}/app"
 
-# --- 2) Créer /home/<user>/app et y ajouter le marqueur .extract_data ---
-mkdir -p "$APP_DIR"
-touch "${APP_DIR}/.extract_data"
+# --- 2) Créer /home/<user>/app (dépôt Git ou copie) ---
 echo "Cible: $APP_DIR (utilisateur: $TARGET_USER)"
+APPLICATION_ROOT=""
 
-# --- Télécharger le dépôt directement sous /home/<user>/ (puis copier dans app) ---
 if [[ -n "$REPO_BUCKET_URL" ]]; then
-  DOWNLOAD_DIR="${TARGET_HOME}/.repo_extract_meta"
-  rm -rf "$DOWNLOAD_DIR"
-  mkdir -p "$DOWNLOAD_DIR"
-  echo "Téléchargement du dépôt dans ${DOWNLOAD_DIR} depuis: $REPO_BUCKET_URL"
   if [[ "$REPO_BUCKET_URL" == *.git ]]; then
-    git clone --depth 1 "$REPO_BUCKET_URL" "$DOWNLOAD_DIR" || {
+    # Clone Git dans APP_DIR : on garde .git pour permettre git pull
+    rm -rf "$APP_DIR"
+    echo "Clone du dépôt Git dans $APP_DIR depuis: $REPO_BUCKET_URL"
+    git clone --depth 1 "$REPO_BUCKET_URL" "$APP_DIR" || {
       echo "Erreur: échec du clone git." >&2
       exit 1
     }
-  elif [[ "$REPO_BUCKET_URL" == *.zip ]]; then
-    (cd "$DOWNLOAD_DIR" && curl -sL "$REPO_BUCKET_URL" -o archive.zip && unzip -q -o archive.zip && rm -f archive.zip) || {
-      echo "Erreur: échec du téléchargement ou extraction du zip." >&2
-      exit 1
-    }
-  elif [[ "$REPO_BUCKET_URL" == *.tar.gz ]] || [[ "$REPO_BUCKET_URL" == *.tgz ]]; then
-    curl -sL "$REPO_BUCKET_URL" | tar xz -C "$DOWNLOAD_DIR" || {
-      echo "Erreur: échec du téléchargement ou extraction de l'archive." >&2
-      exit 1
-    }
-  else
-    echo "Erreur: REPO_BUCKET_URL doit être une URL .zip, .tar.gz, .tgz ou .git" >&2
-    exit 1
-  fi
-  # Trouver le dossier app/ dans le téléchargement
-  if [[ -d "${DOWNLOAD_DIR}/app" ]]; then
-    SOURCE_APP="${DOWNLOAD_DIR}/app"
-  else
-    FOUND=$(find "$DOWNLOAD_DIR" -maxdepth 2 -type d -name app 2>/dev/null | head -1)
-    if [[ -n "$FOUND" ]]; then
-      SOURCE_APP="$FOUND"
+    if [[ -d "${APP_DIR}/app" ]] && [[ -f "${APP_DIR}/app/composer.json" ]]; then
+      APPLICATION_ROOT="${APP_DIR}/app"
     else
-      echo "Erreur: archive invalide (aucun dossier app/ trouvé)." >&2
-      rm -rf "$DOWNLOAD_DIR"
+      APPLICATION_ROOT="${APP_DIR}"
+    fi
+    touch "${APPLICATION_ROOT}/.extract_data"
+    echo "Code déployé dans $APP_DIR (dépôt Git ; application dans ${APPLICATION_ROOT})"
+  else
+    # Archive (zip, tar) : téléchargement puis copie (sans .git)
+    DOWNLOAD_DIR="${TARGET_HOME}/.repo_extract_meta"
+    rm -rf "$DOWNLOAD_DIR"
+    mkdir -p "$DOWNLOAD_DIR" "$APP_DIR"
+    echo "Téléchargement dans ${DOWNLOAD_DIR} depuis: $REPO_BUCKET_URL"
+    if [[ "$REPO_BUCKET_URL" == *.zip ]]; then
+      (cd "$DOWNLOAD_DIR" && curl -sL "$REPO_BUCKET_URL" -o archive.zip && unzip -q -o archive.zip && rm -f archive.zip) || {
+        echo "Erreur: échec du téléchargement ou extraction du zip." >&2
+        exit 1
+      }
+    elif [[ "$REPO_BUCKET_URL" == *.tar.gz ]] || [[ "$REPO_BUCKET_URL" == *.tgz ]]; then
+      curl -sL "$REPO_BUCKET_URL" | tar xz -C "$DOWNLOAD_DIR" || {
+        echo "Erreur: échec du téléchargement ou extraction de l'archive." >&2
+        exit 1
+      }
+    else
+      echo "Erreur: REPO_BUCKET_URL doit être une URL .zip, .tar.gz, .tgz ou .git" >&2
       exit 1
     fi
+    if [[ -d "${DOWNLOAD_DIR}/app" ]]; then
+      SOURCE_APP="${DOWNLOAD_DIR}/app"
+    else
+      FOUND=$(find "$DOWNLOAD_DIR" -maxdepth 2 -type d -name app 2>/dev/null | head -1)
+      if [[ -n "$FOUND" ]]; then
+        SOURCE_APP="$FOUND"
+      else
+        echo "Erreur: archive invalide (aucun dossier app/ trouvé)." >&2
+        rm -rf "$DOWNLOAD_DIR"
+        exit 1
+      fi
+    fi
+    rsync -a --exclude='.env' --exclude='var/' "$SOURCE_APP/" "$APP_DIR/"
+    rm -rf "$DOWNLOAD_DIR"
+    APPLICATION_ROOT="${APP_DIR}"
+    touch "${APPLICATION_ROOT}/.extract_data"
+    echo "Code déployé dans $APP_DIR"
   fi
-  rsync -a --exclude='.env' --exclude='var/' "$SOURCE_APP/" "$APP_DIR/"
-  rm -rf "$DOWNLOAD_DIR"
-  echo "Code déployé dans $APP_DIR"
 else
   if [[ ! -d "${INSTALL_SCRIPT_DIR}/app" ]]; then
     echo "Erreur: répertoire app/ introuvable (exécuter depuis la racine du dépôt ou définir REPO_BUCKET_URL)." >&2
     exit 1
   fi
+  mkdir -p "$APP_DIR"
+  APPLICATION_ROOT="${APP_DIR}"
+  touch "${APPLICATION_ROOT}/.extract_data"
 fi
 
 # Nom de la base = user MySQL (créé par vhost_apache.sh)
@@ -130,25 +145,20 @@ fi
 
 DATABASE_URL="mysql://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:3306/${DB_NAME}?serverVersion=mariadb-11.8.3"
 
-# --- 3) Déploiement du code (déjà fait si REPO_BUCKET_URL ; sinon copie depuis le répertoire local) ---
+# --- 3) Déploiement du code local (si pas d’URL) ---
 if [[ -z "$REPO_BUCKET_URL" ]]; then
-  if [[ ! -d "${INSTALL_SCRIPT_DIR}/app" ]]; then
-    echo "Erreur: répertoire app/ introuvable." >&2
-    exit 1
-  fi
   echo "Déploiement du code (local) vers $APP_DIR..."
   rsync -a --exclude='.env' --exclude='var/' --exclude='.extract_data' "${INSTALL_SCRIPT_DIR}/app/" "$APP_DIR/"
+  touch "${APPLICATION_ROOT}/.extract_data"
 fi
-# Conserver le marqueur
-touch "${APP_DIR}/.extract_data"
 
-# --- Document root du vhost : pointer data/www vers app/public ---
+# --- Document root du vhost : pointer data/www vers application/public ---
 DATA_WWW="${TARGET_HOME}/data/www"
 if [[ -d "$DATA_WWW" ]]; then
   rm -rf "$DATA_WWW"
-  ln -sfn "${APP_DIR}/public" "$DATA_WWW"
+  ln -sfn "${APPLICATION_ROOT}/public" "$DATA_WWW"
   chown -h "${TARGET_USER}:users" "$DATA_WWW" 2>/dev/null || true
-  echo "Document root du vhost pointé vers: ${APP_DIR}/public"
+  echo "Document root du vhost pointé vers: ${APPLICATION_ROOT}/public"
 fi
 
 # --- Composer : installé en système si absent (disponible pour l'utilisateur du vhost) ---
@@ -173,43 +183,44 @@ COMPOSER_CMD="$COMPOSER_BIN"
 # --- Dépendances PHP (composer doit pouvoir écrire composer.lock et vendor/) ---
 chown -R "${TARGET_USER}:users" "$APP_DIR"
 echo "Installation des dépendances Composer..."
-if ! su -s /bin/bash "$TARGET_USER" -c "cd '$APP_DIR' && $COMPOSER_CMD install --no-dev --optimize-autoloader --no-interaction"; then
+if ! su -s /bin/bash "$TARGET_USER" -c "cd '$APPLICATION_ROOT' && $COMPOSER_CMD install --no-dev --optimize-autoloader --no-interaction"; then
   echo "Composer install a échoué (voir message ci-dessus ; vérifier PHP et extensions)." >&2
   exit 1
 fi
 
 # --- Fichier .env ---
-if [[ ! -f "${APP_DIR}/.env" ]]; then
-  cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
+if [[ ! -f "${APPLICATION_ROOT}/.env" ]]; then
+  cp "${APPLICATION_ROOT}/.env.example" "${APPLICATION_ROOT}/.env"
 fi
 
 # Remplacer ou ajouter DATABASE_URL (éviter sed avec caractères spéciaux)
-if grep -q '^DATABASE_URL=' "${APP_DIR}/.env"; then
-  grep -v '^DATABASE_URL=' "${APP_DIR}/.env" > "${APP_DIR}/.env.tmp"
-  echo "DATABASE_URL=\"${DATABASE_URL}\"" >> "${APP_DIR}/.env.tmp"
-  mv "${APP_DIR}/.env.tmp" "${APP_DIR}/.env"
+if grep -q '^DATABASE_URL=' "${APPLICATION_ROOT}/.env"; then
+  grep -v '^DATABASE_URL=' "${APPLICATION_ROOT}/.env" > "${APPLICATION_ROOT}/.env.tmp"
+  echo "DATABASE_URL=\"${DATABASE_URL}\"" >> "${APPLICATION_ROOT}/.env.tmp"
+  mv "${APPLICATION_ROOT}/.env.tmp" "${APPLICATION_ROOT}/.env"
 else
-  echo "DATABASE_URL=\"${DATABASE_URL}\"" >> "${APP_DIR}/.env"
+  echo "DATABASE_URL=\"${DATABASE_URL}\"" >> "${APPLICATION_ROOT}/.env"
 fi
 
 # APP_ENV prod si pas déjà défini
-if ! grep -q '^APP_ENV=' "${APP_DIR}/.env"; then
-  echo "APP_ENV=prod" >> "${APP_DIR}/.env"
+if ! grep -q '^APP_ENV=' "${APPLICATION_ROOT}/.env"; then
+  echo "APP_ENV=prod" >> "${APPLICATION_ROOT}/.env"
 fi
-if ! grep -q '^APP_DEBUG=' "${APP_DIR}/.env"; then
-  echo "APP_DEBUG=0" >> "${APP_DIR}/.env"
+if ! grep -q '^APP_DEBUG=' "${APPLICATION_ROOT}/.env"; then
+  echo "APP_DEBUG=0" >> "${APPLICATION_ROOT}/.env"
 fi
 
 # --- Schéma BDD ---
 echo "Mise à jour du schéma Doctrine..."
-(cd "$APP_DIR" && php bin/console doctrine:schema:update --force --no-interaction) || true
+(cd "$APPLICATION_ROOT" && php bin/console doctrine:schema:update --force --no-interaction) || true
 
 # --- Droits ---
-mkdir -p "${APP_DIR}/var"
+mkdir -p "${APPLICATION_ROOT}/var"
 chown -R "${TARGET_USER}:users" "$APP_DIR"
-chmod -R 775 "${APP_DIR}/var" 2>/dev/null || true
+chmod -R 775 "${APPLICATION_ROOT}/var" 2>/dev/null || true
 
-echo "Installation terminée: $APP_DIR"
-echo "Document root à configurer: ${APP_DIR}/public"
+echo "Installation terminée: $APPLICATION_ROOT"
+echo "Document root: ${APPLICATION_ROOT}/public"
+[[ -d "${APP_DIR}/.git" ]] && echo "Pour mettre à jour le code : cd $APP_DIR && git pull ; cd $APPLICATION_ROOT && /usr/local/bin/composer install --no-dev --optimize-autoloader"
 echo "Base de données: ${DB_NAME} (user: ${DB_USER})"
 [[ -n "$VHOST_FQDN" ]] && echo "Vhost Apache: $VHOST_FQDN"

@@ -190,7 +190,7 @@ fi
 
 # --- Fichier .env ---
 if [[ ! -f "${APPLICATION_ROOT}/.env" ]]; then
-  cp "${APPLICATION_ROOT}/.env.example" "${APPLICATION_ROOT}/.env"
+  cp "${APPLICATION_ROOT}/.env.dist" "${APPLICATION_ROOT}/.env"
 fi
 
 # Remplacer ou ajouter DATABASE_URL (éviter sed avec caractères spéciaux)

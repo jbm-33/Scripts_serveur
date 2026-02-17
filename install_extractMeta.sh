@@ -65,15 +65,15 @@ if [[ -z "$DB_USER" ]]; then
   exit 1
 fi
 TARGET_HOME="/home/${TARGET_USER}"
+# Répertoire du dépôt (clone Git) ou de l’app (copie) ; évite /home/user/app/app quand le dépôt a un sous-dossier app/
 APP_DIR="${TARGET_HOME}/app"
+APPLICATION_ROOT=""
 
 # --- 2) Créer /home/<user>/app (dépôt Git ou copie) ---
 echo "Cible: $APP_DIR (utilisateur: $TARGET_USER)"
-APPLICATION_ROOT=""
-
 if [[ -n "$REPO_BUCKET_URL" ]]; then
   if [[ "$REPO_BUCKET_URL" == *.git ]]; then
-    # Clone Git dans APP_DIR : on garde .git pour permettre git pull
+    # Clone Git dans app/ : on garde .git pour git pull
     rm -rf "$APP_DIR"
     echo "Clone du dépôt Git dans $APP_DIR depuis: $REPO_BUCKET_URL"
     git clone --depth 1 "$REPO_BUCKET_URL" "$APP_DIR" || {
@@ -86,6 +86,7 @@ if [[ -n "$REPO_BUCKET_URL" ]]; then
       APPLICATION_ROOT="${APP_DIR}"
     fi
     touch "${APPLICATION_ROOT}/.extract_data"
+    DEPLOY_ROOT="$APP_DIR"
     echo "Code déployé dans $APP_DIR (dépôt Git ; application dans ${APPLICATION_ROOT})"
   else
     # Archive (zip, tar) : téléchargement puis copie (sans .git)
@@ -122,6 +123,7 @@ if [[ -n "$REPO_BUCKET_URL" ]]; then
     rsync -a --exclude='.env' --exclude='var/' "$SOURCE_APP/" "$APP_DIR/"
     rm -rf "$DOWNLOAD_DIR"
     APPLICATION_ROOT="${APP_DIR}"
+    DEPLOY_ROOT="${APP_DIR}"
     touch "${APPLICATION_ROOT}/.extract_data"
     echo "Code déployé dans $APP_DIR"
   fi
@@ -132,8 +134,10 @@ else
   fi
   mkdir -p "$APP_DIR"
   APPLICATION_ROOT="${APP_DIR}"
+  DEPLOY_ROOT="${APP_DIR}"
   touch "${APPLICATION_ROOT}/.extract_data"
 fi
+echo "Cible: $APPLICATION_ROOT (utilisateur: $TARGET_USER)"
 
 # Nom de la base = user MySQL (créé par vhost_apache.sh)
 DB_NAME="$DB_USER"
@@ -181,7 +185,7 @@ fi
 COMPOSER_CMD="$COMPOSER_BIN"
 
 # --- Dépendances PHP (composer doit pouvoir écrire composer.lock et vendor/) ---
-chown -R "${TARGET_USER}:users" "$APP_DIR"
+chown -R "${TARGET_USER}:users" "$DEPLOY_ROOT"
 echo "Installation des dépendances Composer..."
 if ! su -s /bin/bash "$TARGET_USER" -c "cd '$APPLICATION_ROOT' && $COMPOSER_CMD install --no-dev --optimize-autoloader --no-interaction"; then
   echo "Composer install a échoué (voir message ci-dessus ; vérifier PHP et extensions)." >&2
@@ -216,11 +220,11 @@ echo "Mise à jour du schéma Doctrine..."
 
 # --- Droits ---
 mkdir -p "${APPLICATION_ROOT}/var"
-chown -R "${TARGET_USER}:users" "$APP_DIR"
+chown -R "${TARGET_USER}:users" "$DEPLOY_ROOT"
 chmod -R 775 "${APPLICATION_ROOT}/var" 2>/dev/null || true
 
 echo "Installation terminée: $APPLICATION_ROOT"
 echo "Document root: ${APPLICATION_ROOT}/public"
-[[ -d "${APP_DIR}/.git" ]] && echo "Pour mettre à jour le code : cd $APP_DIR && git pull ; cd $APPLICATION_ROOT && /usr/local/bin/composer install --no-dev --optimize-autoloader"
+[[ -d "${DEPLOY_ROOT}/.git" ]] && echo "Pour mettre à jour le code : cd $DEPLOY_ROOT && git pull ; cd $APPLICATION_ROOT && /usr/local/bin/composer install --no-dev --optimize-autoloader"
 echo "Base de données: ${DB_NAME} (user: ${DB_USER})"
 [[ -n "$VHOST_FQDN" ]] && echo "Vhost Apache: $VHOST_FQDN"

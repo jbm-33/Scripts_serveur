@@ -247,11 +247,13 @@ chdir = /
 catch_workers_output = no
 "
 
-# SQL MariaDB
+# SQL MariaDB (localhost + 127.0.0.1 : l'app peut se connecter en TCP via 127.0.0.1)
 content_genmysql2="
 CREATE USER IF NOT EXISTS '$sysuser'@'localhost' IDENTIFIED BY '$mysql_pass';
+CREATE USER IF NOT EXISTS '$sysuser'@'127.0.0.1' IDENTIFIED BY '$mysql_pass';
 CREATE DATABASE IF NOT EXISTS \`$sysuser\`;
 GRANT ALL PRIVILEGES ON \`$sysuser\`.* TO '$sysuser'@'localhost';
+GRANT ALL PRIVILEGES ON \`$sysuser\`.* TO '$sysuser'@'127.0.0.1';
 FLUSH PRIVILEGES;
 "
 

@@ -186,7 +186,7 @@ fi
 # 4) Supprimer la base et l'utilisateur MariaDB
 mysql_root=$(get_password "mariadb")
 if [[ -n "$mysql_root" ]]; then
-  mysql -u root -p"$mysql_root" -e "DROP DATABASE IF EXISTS \`$sysuser\`; DROP USER IF EXISTS '$sysuser'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null && \
+  mysql -u root -p"$mysql_root" -e "DROP DATABASE IF EXISTS \`$sysuser\`; DROP USER IF EXISTS '$sysuser'@'localhost'; DROP USER IF EXISTS '$sysuser'@'127.0.0.1'; FLUSH PRIVILEGES;" 2>/dev/null && \
     echo -e "${GREEN}✓ Base et utilisateur MySQL supprimés${NC}" || \
     echo -e "${YELLOW}Attention: échec ou partiel MySQL (base/user $sysuser)${NC}"
 else

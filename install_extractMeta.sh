@@ -147,7 +147,7 @@ DATA_WWW="${TARGET_HOME}/data/www"
 if [[ -d "$DATA_WWW" ]]; then
   rm -rf "$DATA_WWW"
   ln -sfn "${APP_DIR}/public" "$DATA_WWW"
-  chown -h "${TARGET_USER}:${TARGET_USER}" "$DATA_WWW" 2>/dev/null || true
+  chown -h "${TARGET_USER}:users" "$DATA_WWW" 2>/dev/null || true
   echo "Document root du vhost pointé vers: ${APP_DIR}/public"
 fi
 
@@ -170,7 +170,8 @@ if [[ ! -x "$COMPOSER_BIN" ]]; then
 fi
 COMPOSER_CMD="$COMPOSER_BIN"
 
-# --- Dépendances PHP ---
+# --- Dépendances PHP (composer doit pouvoir écrire composer.lock et vendor/) ---
+chown -R "${TARGET_USER}:users" "$APP_DIR"
 echo "Installation des dépendances Composer..."
 if ! su -s /bin/bash "$TARGET_USER" -c "cd '$APP_DIR' && $COMPOSER_CMD install --no-dev --optimize-autoloader --no-interaction"; then
   echo "Composer install a échoué (voir message ci-dessus ; vérifier PHP et extensions)." >&2
@@ -205,7 +206,7 @@ echo "Mise à jour du schéma Doctrine..."
 
 # --- Droits ---
 mkdir -p "${APP_DIR}/var"
-chown -R "${TARGET_USER}:${TARGET_USER}" "$APP_DIR"
+chown -R "${TARGET_USER}:users" "$APP_DIR"
 chmod -R 775 "${APP_DIR}/var" 2>/dev/null || true
 
 echo "Installation terminée: $APP_DIR"

@@ -12,6 +12,7 @@ VHOST_FQDN="${1:-}"
 
 # Racine du dépôt Scripts_serveur (pour appeler scripts/vhost_apache.sh même si REPO_BUCKET_URL est utilisé)
 SCRIPT_OWN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_OWN_DIR}/scripts/utils.sh"
 
 # --- Chemin / URL du dépôt : à remplir ci-dessous (ou via variable d'environnement REPO_BUCKET_URL) ---
 # Si défini, le script télécharge le code depuis cette URL. Sinon, il utilise le répertoire courant.
@@ -64,6 +65,25 @@ if [[ -z "$DB_USER" ]]; then
   echo "Erreur: impossible de lire loginmysql dans $SITES_INSTALLED." >&2
   exit 1
 fi
+
+# S'assurer que l'utilisateur et la base MySQL existent (au cas où vhost_apache.sh n'a pas pu les créer)
+MYSQL_ROOT="$(get_password "mariadb")"
+if [[ -n "$MYSQL_ROOT" ]] && [[ -n "$DB_PASS" ]]; then
+  MYSQL_SQL="CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+CREATE DATABASE IF NOT EXISTS \`${DB_USER}\`;
+GRANT ALL PRIVILEGES ON \`${DB_USER}\`.* TO '${DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${DB_USER}\`.* TO '${DB_USER}'@'127.0.0.1';
+FLUSH PRIVILEGES;"
+  if echo "$MYSQL_SQL" | mysql --database=mysql -u root -p"$MYSQL_ROOT" 2>/dev/null; then
+    echo "✓ Utilisateur et base MySQL ${DB_USER} créés ou déjà présents."
+  else
+    echo "Attention: création MySQL échouée (vérifier mot de passe root dans ${DEVOPS_ROOT}/.passwords)." >&2
+  fi
+elif [[ -z "$MYSQL_ROOT" ]]; then
+  echo "Attention: mot de passe MariaDB root non trouvé dans ${DEVOPS_ROOT}/.passwords — si l'utilisateur ${DB_USER} n'existe pas, doctrine:schema:update échouera." >&2
+fi
+
 TARGET_HOME="/home/${TARGET_USER}"
 # Répertoire du dépôt (clone Git) ou de l’app (copie) ; évite /home/user/app/app quand le dépôt a un sous-dossier app/
 APP_DIR="${TARGET_HOME}/app"

@@ -117,10 +117,11 @@ else
     exit 1
 fi
 
-# Sauvegarder le mot de passe
+# Sauvegarder le mot de passe root dans /root/Devops/.passwords (pour vhost_apache.sh et install_extractMeta.sh)
+DEVOPS_ROOT="/root/Devops"
 save_password "mariadb" "root" "$MARIADB_ROOT_PASSWORD"
 
 echo "✓ MariaDB installé et configuré"
 echo "  Utilisateur root: root"
-echo "  Mot de passe sauvegardé dans ${DEVOPS_ROOT}/.passwords"
+echo "  Mot de passe dans ${DEVOPS_ROOT}/.passwords (clé: mariadb)"
 echo "  Configuration sauvegardée dans ${DEVOPS_ROOT}/configs/"

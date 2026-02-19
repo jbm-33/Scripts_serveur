@@ -42,17 +42,19 @@ if command -v mongodump &>/dev/null && systemctl is-active --quiet mongod 2>/dev
     fi
 fi
 
-# Dump MariaDB (optionnel, sans mot de passe = échec silencieux)
+# Dump MariaDB (root avec ou sans mdp : socket Unix ou .passwords)
 if command -v mysqldump &>/dev/null && systemctl is-active --quiet mariadb 2>/dev/null; then
+    MYSQL_DUMP="${TMPDIR}/mariadb_dump_${STAMP}.sql"
     MYSQL_PASS=$(get_password "mariadb")
     if [ -n "$MYSQL_PASS" ]; then
-        MYSQL_DUMP="${TMPDIR}/mariadb_dump_${STAMP}.sql"
         mysqldump -u root -p"$MYSQL_PASS" --all-databases --single-transaction --routines --triggers > "$MYSQL_DUMP" 2>/dev/null || true
-        if [ -s "$MYSQL_DUMP" ]; then
-            echo "  + dump MariaDB inclus"
-        else
-            rm -f "$MYSQL_DUMP"
-        fi
+    else
+        mysqldump -u root --all-databases --single-transaction --routines --triggers > "$MYSQL_DUMP" 2>/dev/null || true
+    fi
+    if [ -s "$MYSQL_DUMP" ]; then
+        echo "  + dump MariaDB inclus"
+    else
+        rm -f "$MYSQL_DUMP"
     fi
 fi
 

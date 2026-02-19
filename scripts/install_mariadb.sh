@@ -63,6 +63,9 @@ DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 FLUSH PRIVILEGES;
 EOF
+
+    # Root sans mot de passe : authentification par socket Unix (seul l'utilisateur système root peut se connecter)
+    mysql -u root -p"${MARIADB_ROOT_PASSWORD}" -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket; FLUSH PRIVILEGES;"
     
     # Sauvegarder les configurations MariaDB
     if [ -f /etc/mysql/mariadb.conf.d/50-server.cnf ]; then
@@ -104,6 +107,9 @@ DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 FLUSH PRIVILEGES;
 EOF
+
+    # Root sans mot de passe : authentification par socket Unix
+    mysql -u root -p"${MARIADB_ROOT_PASSWORD}" -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket; FLUSH PRIVILEGES;"
     
     # Sauvegarder les configurations MariaDB
     if [ -f /etc/my.cnf ]; then
@@ -117,11 +123,11 @@ else
     exit 1
 fi
 
-# Stocker le mot de passe root dans .passwords (obligatoire pour vhost_apache.sh et install_extractMeta.sh)
+# Stocker le mot de passe root dans .passwords (sauvegarde / scripts si besoin)
 DEVOPS_ROOT="/root/Devops"
 save_password "mariadb" "root" "$MARIADB_ROOT_PASSWORD"
 
 echo "✓ MariaDB installé et configuré"
-echo "  Utilisateur root: root"
-echo "  Mot de passe stocké dans ${DEVOPS_ROOT}/.passwords (clé: mariadb)"
+echo "  Connexion root : sans mot de passe (auth. socket Unix) — mysql -u root"
+echo "  Mot de passe root stocké dans ${DEVOPS_ROOT}/.passwords (clé: mariadb)"
 echo "  Configuration sauvegardée dans ${DEVOPS_ROOT}/configs/"

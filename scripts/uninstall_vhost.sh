@@ -183,14 +183,18 @@ if command -v apachectl &>/dev/null; then
   echo -e "${GREEN}✓ Apache rechargé${NC}"
 fi
 
-# 4) Supprimer la base et l'utilisateur MariaDB
+# 4) Supprimer la base et l'utilisateur MariaDB (root avec ou sans mdp : socket Unix ou .passwords)
 mysql_root=$(get_password "mariadb")
 if [[ -n "$mysql_root" ]]; then
   mysql -u root -p"$mysql_root" -e "DROP DATABASE IF EXISTS \`$sysuser\`; DROP USER IF EXISTS '$sysuser'@'localhost'; DROP USER IF EXISTS '$sysuser'@'127.0.0.1'; FLUSH PRIVILEGES;" 2>/dev/null && \
     echo -e "${GREEN}✓ Base et utilisateur MySQL supprimés${NC}" || \
     echo -e "${YELLOW}Attention: échec ou partiel MySQL (base/user $sysuser)${NC}"
 else
-  echo -e "${YELLOW}Mot de passe MariaDB non trouvé dans ${ROOT}/.passwords — base/user $sysuser non supprimés.${NC}"
+  if mysql -u root -e "DROP DATABASE IF EXISTS \`$sysuser\`; DROP USER IF EXISTS '$sysuser'@'localhost'; DROP USER IF EXISTS '$sysuser'@'127.0.0.1'; FLUSH PRIVILEGES;" 2>/dev/null; then
+    echo -e "${GREEN}✓ Base et utilisateur MySQL supprimés${NC}"
+  else
+    echo -e "${YELLOW}Mot de passe MariaDB non trouvé et connexion root sans mdp échouée — base/user $sysuser non supprimés.${NC}"
+  fi
 fi
 
 # 5) Supprimer le dossier home et l'utilisateur système

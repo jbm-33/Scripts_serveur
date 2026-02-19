@@ -285,19 +285,22 @@ fi
 # Pool PHP-FPM
 writefile "create" "$fpm_conf/$vhostname.conf" "$content_fpm"
 
-# MariaDB : créer utilisateur et base (nécessite mariadb:root dans ${ROOT}/.passwords)
+# MariaDB : créer utilisateur et base (root avec ou sans mdp : socket Unix ou .passwords)
+echo "$content_genmysql2" > "$ROOT/sql2.sql"
 if [ -n "$mysql_root" ]; then
-    echo "$content_genmysql2" > "$ROOT/sql2.sql"
-    if mysql --database=mysql -p"$mysql_root" < "$ROOT/sql2.sql" 2>/dev/null; then
+    if mysql --database=mysql -u root -p"$mysql_root" < "$ROOT/sql2.sql" 2>/dev/null; then
         echo -e "${GREEN}✓ Utilisateur et base MySQL $sysuser créés${NC}"
     else
         echo -e "${YELLOW}Attention: création MySQL échouée (vérifier mot de passe root dans ${ROOT}/.passwords).${NC}" >&2
     fi
-    rm -f "$ROOT/sql2.sql"
 else
-    echo -e "${YELLOW}Mot de passe MariaDB root non trouvé dans ${ROOT}/.passwords — utilisateur et base $sysuser non créés.${NC}" >&2
-    echo -e "${YELLOW}Ajoutez 'mariadb:root:<mot_de_passe>' dans ${ROOT}/.passwords puis créez l'utilisateur à la main ou relancez install_extractMeta.sh.${NC}" >&2
+    if mysql --database=mysql -u root < "$ROOT/sql2.sql" 2>/dev/null; then
+        echo -e "${GREEN}✓ Utilisateur et base MySQL $sysuser créés${NC}"
+    else
+        echo -e "${YELLOW}Attention: création MySQL échouée (root sans mdp attendu ? Vérifier ${ROOT}/.passwords si root a un mot de passe).${NC}" >&2
+    fi
 fi
+rm -f "$ROOT/sql2.sql"
 
 echo '<?php echo "OK"; ?>' > "/home/$sysuser/data/www/index.php"
 fixperms

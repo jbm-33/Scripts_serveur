@@ -66,22 +66,28 @@ if [[ -z "$DB_USER" ]]; then
   exit 1
 fi
 
-# S'assurer que l'utilisateur et la base MySQL existent (au cas où vhost_apache.sh n'a pas pu les créer)
+# S'assurer que l'utilisateur et la base MySQL existent (root avec ou sans mdp : socket Unix ou .passwords)
 MYSQL_ROOT="$(get_password "mariadb")"
-if [[ -n "$MYSQL_ROOT" ]] && [[ -n "$DB_PASS" ]]; then
-  MYSQL_SQL="CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+MYSQL_SQL="CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
 CREATE DATABASE IF NOT EXISTS \`${DB_USER}\`;
 GRANT ALL PRIVILEGES ON \`${DB_USER}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON \`${DB_USER}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;"
-  if echo "$MYSQL_SQL" | mysql --database=mysql -u root -p"$MYSQL_ROOT" 2>/dev/null; then
-    echo "✓ Utilisateur et base MySQL ${DB_USER} créés ou déjà présents."
+if [[ -n "$DB_PASS" ]]; then
+  if [[ -n "$MYSQL_ROOT" ]]; then
+    if echo "$MYSQL_SQL" | mysql --database=mysql -u root -p"$MYSQL_ROOT" 2>/dev/null; then
+      echo "✓ Utilisateur et base MySQL ${DB_USER} créés ou déjà présents."
+    else
+      echo "Attention: création MySQL échouée (vérifier mot de passe root dans ${DEVOPS_ROOT}/.passwords)." >&2
+    fi
   else
-    echo "Attention: création MySQL échouée (vérifier mot de passe root dans ${DEVOPS_ROOT}/.passwords)." >&2
+    if echo "$MYSQL_SQL" | mysql --database=mysql -u root 2>/dev/null; then
+      echo "✓ Utilisateur et base MySQL ${DB_USER} créés ou déjà présents."
+    else
+      echo "Attention: création MySQL échouée (connexion root sans mdp ou .passwords)." >&2
+    fi
   fi
-elif [[ -z "$MYSQL_ROOT" ]]; then
-  echo "Attention: mot de passe MariaDB root non trouvé dans ${DEVOPS_ROOT}/.passwords — si l'utilisateur ${DB_USER} n'existe pas, doctrine:schema:update échouera." >&2
 fi
 
 TARGET_HOME="/home/${TARGET_USER}"
